@@ -1,2 +1,2 @@
 # livegraph
-app for creating and sharing concept map
+app for creating and sharing concept maps
