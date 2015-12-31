@@ -32,5 +32,19 @@ users.create = function (user) {
       }
     });
 };
-console.log(module.exports);
+
+users.read = function (user) {
+  return db.query('FOR u IN users FILTER u.username == @username RETURN u', {username: user.username})
+    .then((cursor) => {
+      return cursor.all();
+    })
+    .then(users => {
+      if(users.length > 0) {
+        return users[0];
+      }
+      else throw new Error(404);
+    });
+};
+
+//console.log(module.exports);
 module.exports = {users: users};

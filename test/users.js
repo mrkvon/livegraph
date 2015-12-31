@@ -10,10 +10,49 @@ var api = supertest(app);
 //chai.use(require('sinon-chai'));
 //chai.use(require('chai-as-promised'));
 
-before(function (done) {
-  var Database = require('arangojs');
+var eUsername = 'existent-user';
+var neUsername = 'nonexistent-user';
+var newUsername = 'new-user';
+var shortUsername = 'as';
+var longUsername = 'verylongusernameverylongusername0123456789';
+var invalidUsername = '.asdf';
+var eEmail = 'existent@example.com';
+var neEmail = 'nonexistent@example.com';
+var newEmail = 'new@example.com';
+var invalidEmail = 'invalid@email';
+var validPassword = 'p4s5w0rD';
+var differentPassword = '&&^#)(&)';
+var invalidPassword = 'pwd';
+var auth = 'Basic ' + new Buffer(eUsername + ':' + validPassword).toString('base64');
 
-  var db = new Database({url: 'http://localhost:8529', databaseName: 'livegraph'});
+var Database = require('arangojs');
+var db = new Database({url: 'http://localhost:8529', databaseName: 'livegraph'});
+
+beforeEach(function (done) {
+  db.query('FOR u IN users REMOVE u IN users')
+    .then(() => {
+      return db.query('INSERT @user IN users', {
+        user: {
+          username:eUsername,
+          email: eEmail,
+          password: validPassword,
+        }
+      });
+    })
+    .then(() => {
+      done();
+    })
+});
+
+afterEach(function (done) {
+  db.query('FOR u IN users REMOVE u IN users')
+    .then(() => {
+      done();
+    });
+});
+
+
+before(function (done) {
 
   db.query('FOR u IN users REMOVE u IN users')
     .then(()=>{done();});
@@ -42,16 +81,16 @@ describe('POST /users', function () {
     it('should return code 201 Created', function (done) {
       api.post('/users')
         .set('Accept', 'application/json')
-        .send({username: 'test-user1', email: 'mail@example.com', password: 'p4s5w0rd', password2: 'p4s5w0rd'})
+        .send({username: newUsername, email: newEmail, password: validPassword, password2: validPassword})
         .expect(201, done);
     });
   });
 
-  context('without passing user data', function () {
+  context('when user data don\'t pass', function () {
     context('with duplicit username', function () {
       it('should return code 303 and a proper error object', function (done) {
         api.post('/users')
-          .send({username: 'test-user1', email: 'mail@example2.com', password: 'asdfasdf', password2: 'asdfasdf'})
+          .send({username: eUsername, email: neEmail, password: 'asdfasdf', password2: 'asdfasdf'})
           .expect(303)
           .end(function (err, res) {
             if(err) return done(err);
@@ -65,7 +104,7 @@ describe('POST /users', function () {
     context('with duplicit email', function () {
       it('should return code 303 and proper error object', function (done) {
         api.post('/users')
-          .send({username: 'test-user2', email: 'mail@example.com', password: 'asdfasdf', password2: 'asdfasdf'})
+          .send({username: neUsername, email: eEmail, password: validPassword, password2: validPassword})
           .expect(303)
           .end(function (err, res) {
             if(err) return done(err);
@@ -78,10 +117,10 @@ describe('POST /users', function () {
     });
     context('when user data is invalid', function () {
       context('when username is invalid', function () {
-        it('should return code 400 Bad Request and proper error object', (done) => {
+        it('(too short username) should return code 400 Bad Request and proper error object', (done) => {
           api.post('/users')
             .set('Accept', 'application/json')
-            .send({username: 'te', email: 'mail22@example.com', password: '', password2: ''})
+            .send({username: shortUsername, email: neEmail, password: validPassword, password2: validPassword})
             .expect(400)
             .end(function (err, res) {
               if(err) return done(err);
@@ -91,10 +130,10 @@ describe('POST /users', function () {
               done();
             });
         });
-        it('should return code 400 Bad Request and proper error object', (done) => {
+        it('(too long username) should return code 400 Bad Request and proper error object', (done) => {
           api.post('/users')
             .set('Accept', 'application/json')
-            .send({username: 'teaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', email: 'mail22@example.com', password: '', password2: ''})
+            .send({username: longUsername, email: 'mail22@example.com', password: '', password2: ''})
             .expect(400)
             .end(function (err, res) {
               if(err) return done(err);
@@ -104,10 +143,10 @@ describe('POST /users', function () {
               done();
             });
         });
-        it('should return code 400 Bad Request and proper error object', (done) => {
+        it('(not passing regex) should return code 400 Bad Request and a proper error object', (done) => {
           api.post('/users')
             .set('Accept', 'application/json')
-            .send({username: 'teaaaaA$', email: 'mail22@example.com', password: '', password2: ''})
+            .send({username: invalidUsername, email: 'mail22@example.com', password: '', password2: ''})
             .expect(400)
             .end(function (err, res) {
               if(err) return done(err);
@@ -123,7 +162,7 @@ describe('POST /users', function () {
         it('should return code 400 Bad Request and proper error object', (done) => {
           api.post('/users')
             .set('Accept', 'application/json')
-            .send({username: 'aasdf', email: 'eeeexample.com', password: '', password2: ''})
+            .send({username: 'aasdf', email: invalidEmail, password: '', password2: ''})
             .expect(400)
             .end(function (err, res) {
               if(err) return done(err);
@@ -140,7 +179,7 @@ describe('POST /users', function () {
         it('(bad length) should return code 400 Bad Request and a proper error object', (done) => {
           api.post('/users')
             .set('Accept', 'application/json')
-            .send({username: 'user.test2', email: 'example3@example.com', password: 'asdffds', password2: 'asdffds'})
+            .send({username: 'user.test2', email: 'example3@example.com', password: invalidPassword, password2: invalidPassword})
             .expect(400)
             .end(function (err, res) {
               if(err) return done(err);
@@ -159,7 +198,7 @@ describe('POST /users', function () {
         it('should return 400 code Bad Request and a proper error object', (done) => {
           api.post('/users')
             .set('Accept', 'application/json')
-            .send({username: 'user.test3', email: 'example2@example.com', password: '540(LJ7L0--$@', password2: '*()&(ljkwh()L:JK'})
+            .send({username: 'user.test3', email: 'example2@example.com', password: validPassword, password2: differentPassword})
             .expect(400)
             .end(function (err, res) {
               if(err) return done(err);
@@ -176,14 +215,50 @@ describe('POST /users', function () {
 });
 
 describe('GET /users/:username', function () {
-  context('user :username exists', function () {
-    it('returns code 200');
+  context('when authorized', function () {
+    context('when user with :username exists', function () {
+      it('should return code 200 and a proper user object', function (done) {
+        api.get('/users/' + eUsername)
+          .set('Accept', 'application/json')
+          .set('Authorization', auth)
+          .expect(200)
+          .end((err, res) => {
+            if(err) return done(err);
+            expect(res.body).to.have.property('username');
+            expect(res.body.username).to.equal(eUsername);
+            expect(res.body).to.not.have.property('password');
+            return done();
+          });
+      
+      });
+    });
+
+    context('user :username doesn\'t exist', function () {
+      it('should return code 404', (done) => {
+        api.get('/users/'+neUsername)
+          .set('Accept', 'application/json')
+          .set('Authorization', auth) 
+          .expect(404)
+          .end((err, res) => {
+            if(err) return done(err);
+            done();
+          });
+      });
+    });
+
   });
 
-  context('user :username doesn\'t exist', function () {
-    it('returns code 404');
+  context('when unauthorized', () => {
+    it('should return code 401', (done) => {
+      api.get('/users/' + eUsername)
+        .set('Accept', 'application/json')
+        .expect(401)
+        .end((err, res) => {
+          if(err) return done(err);
+          done();
+        });
+    });
   });
-
 });
 
 describe('PUT /users/:username', function () {
@@ -193,7 +268,30 @@ describe('PUT /users/:username', function () {
 describe('PATCH /users/:username', function () {});
 
 describe('DELETE /users/:username', function () {
-  context('deletion successful', function () {
-    it('returns code 204 No Content');
+  context('when deletion is authorized', function () {
+    context('when deletion is successful', function () {
+      it('should return code 204 No Content', (done) => {
+        api.delete('/users/' + eUsername)
+          .set('Accept', 'application/json')
+          .set('Authorization', auth)
+          .expect(401)
+          .end((err, res) => {
+            if(err) return done(err);
+            done();
+          });
+      });
+    });
+  });
+
+  context('when deletion is unauthorized', function () {
+    it('should return code 401 Unauthorized', function (done) {
+      api.delete('/users/' + eUsername)
+        .set('Accept', 'application/json')
+        .expect(401)
+        .end((err, res) => {
+          if(err) return done(err);
+          done();
+        });
+    });
   });
 });
