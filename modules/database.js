@@ -46,5 +46,10 @@ users.read = function (user) {
     });
 };
 
+users.delete = function (user) {
+  return db.query('FOR u IN users FILTER u.username == @username REMOVE u IN users', {username: user.username})
+  .then(null, err => {throw new Error()});
+};
+
 //console.log(module.exports);
 module.exports = {users: users};

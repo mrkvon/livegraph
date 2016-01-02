@@ -24,18 +24,30 @@ var validPassword = 'p4s5w0rD';
 var differentPassword = '&&^#)(&)';
 var invalidPassword = 'pwd';
 var auth = 'Basic ' + new Buffer(eUsername + ':' + validPassword).toString('base64');
+var crypto = require('../modules/auth/crypto');
 
 var Database = require('arangojs');
 var db = new Database({url: 'http://localhost:8529', databaseName: 'livegraph'});
 
 beforeEach(function (done) {
+  var hash, salt;
+  var iterations = 10000;
   db.query('FOR u IN users REMOVE u IN users')
     .then(() => {
+      return crypto.generateSalt();
+    })
+    .then((_salt) => {
+      salt = _salt;
+      return crypto.hashPassword(validPassword, salt, iterations);
+    })
+    .then((_hash) => {
       return db.query('INSERT @user IN users', {
         user: {
           username:eUsername,
           email: eEmail,
-          password: validPassword,
+          hash: _hash,
+          salt: salt,
+          iterations: iterations
         }
       });
     })
@@ -215,8 +227,8 @@ describe('POST /users', function () {
 });
 
 describe('GET /users/:username', function () {
-  context('when authorized', function () {
-    context('when user with :username exists', function () {
+  context('when user with :username exists', function () {
+    context('when authorized', function () {
       it('should return code 200 and a proper user object', function (done) {
         api.get('/users/' + eUsername)
           .set('Accept', 'application/json')
@@ -226,6 +238,7 @@ describe('GET /users/:username', function () {
             if(err) return done(err);
             expect(res.body).to.have.property('username');
             expect(res.body.username).to.equal(eUsername);
+            expect(res.body).to.have.property('email');
             expect(res.body).to.not.have.property('password');
             return done();
           });
@@ -233,26 +246,30 @@ describe('GET /users/:username', function () {
       });
     });
 
-    context('user :username doesn\'t exist', function () {
-      it('should return code 404', (done) => {
-        api.get('/users/'+neUsername)
+    context('when unauthorized', () => {
+      it('should return code 401 and limited user object', (done) => {
+        api.get('/users/' + eUsername)
           .set('Accept', 'application/json')
-          .set('Authorization', auth) 
-          .expect(404)
+          .expect(401)
           .end((err, res) => {
             if(err) return done(err);
-            done();
+            expect(res.body).to.have.property('username');
+            expect(res.body.username).to.equal(eUsername);
+            expect(res.body).to.not.have.property('email');
+            expect(res.body).to.not.have.property('password');
+            return done();
           });
       });
     });
 
+
   });
 
-  context('when unauthorized', () => {
-    it('should return code 401', (done) => {
-      api.get('/users/' + eUsername)
+  context('user :username doesn\'t exist', function () {
+    it('should return code 404', (done) => {
+      api.get('/users/'+neUsername)
         .set('Accept', 'application/json')
-        .expect(401)
+        .expect(404)
         .end((err, res) => {
           if(err) return done(err);
           done();
@@ -274,7 +291,7 @@ describe('DELETE /users/:username', function () {
         api.delete('/users/' + eUsername)
           .set('Accept', 'application/json')
           .set('Authorization', auth)
-          .expect(401)
+          .expect(204)
           .end((err, res) => {
             if(err) return done(err);
             done();
